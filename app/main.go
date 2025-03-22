@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -48,18 +49,34 @@ func handleConnection(conn net.Conn) {
 	// Parse the request line to extract the path
 	path := parsePath(requestLine)
 
-	// Determine response based on path
-	var response string
-	if path == "/" {
-		response = "HTTP/1.1 200 OK\r\n\r\n"
-	} else {
-		response = "HTTP/1.1 404 Not Found\r\n\r\n"
+	// Read and discard headers - not needed for this implementation
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading headers:", err.Error())
+			return
+		}
+		// Headers end with an empty line (just \r\n)
+		if line == "\r\n" {
+			break
+		}
 	}
 
-	// Send response
-	_, err = conn.Write([]byte(response))
-	if err != nil {
-		fmt.Println("Error writing response:", err.Error())
+	// Determine response based on path
+	if path == "/" {
+		sendResponse(conn, "200 OK", "", "")
+	} else if strings.HasPrefix(path, "/echo/") {
+		// Extract the string after "/echo/"
+		echoStr := path[len("/echo/"):]
+		
+		// Send response with Content-Type and Content-Length headers
+		headers := make(map[string]string)
+		headers["Content-Type"] = "text/plain"
+		headers["Content-Length"] = strconv.Itoa(len(echoStr))
+		
+		sendResponse(conn, "200 OK", headers, echoStr)
+	} else {
+		sendResponse(conn, "404 Not Found", "", "")
 	}
 }
 
@@ -75,4 +92,27 @@ func parsePath(requestLine string) string {
 	
 	// The path is the second part of the request line
 	return parts[1]
+}
+
+// Send an HTTP response with optional headers and body
+func sendResponse(conn net.Conn, status string, headers map[string]string, body string) {
+	// Build the response
+	response := fmt.Sprintf("HTTP/1.1 %s\r\n", status)
+	
+	// Add headers
+	for key, value := range headers {
+		response += fmt.Sprintf("%s: %s\r\n", key, value)
+	}
+	
+	// Add empty line to separate headers from body
+	response += "\r\n"
+	
+	// Add body if provided
+	response += body
+	
+	// Send response
+	_, err := conn.Write([]byte(response))
+	if err != nil {
+		fmt.Println("Error writing response:", err.Error())
+	}
 }
