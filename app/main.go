@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -33,20 +35,44 @@ func main() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	// Buffer to read the request
-	buffer := make([]byte, 1024)
+	// Create a buffered reader for the connection
+	reader := bufio.NewReader(conn)
 	
-	// Read the incoming request (we're ignoring it for now as specified)
-	_, err := conn.Read(buffer)
+	// Read the request line
+	requestLine, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Println("Error reading:", err.Error())
+		fmt.Println("Error reading request line:", err.Error())
 		return
 	}
 
-	// Respond with HTTP/1.1 200 OK with proper CRLF line endings
-	response := "HTTP/1.1 200 OK\r\n\r\n"
+	// Parse the request line to extract the path
+	path := parsePath(requestLine)
+
+	// Determine response based on path
+	var response string
+	if path == "/" {
+		response = "HTTP/1.1 200 OK\r\n\r\n"
+	} else {
+		response = "HTTP/1.1 404 Not Found\r\n\r\n"
+	}
+
+	// Send response
 	_, err = conn.Write([]byte(response))
 	if err != nil {
 		fmt.Println("Error writing response:", err.Error())
 	}
+}
+
+// Parse the request line to extract the path
+func parsePath(requestLine string) string {
+	// Split the request line by spaces
+	parts := strings.Split(strings.TrimSpace(requestLine), " ")
+	
+	// Check if we have enough parts for a valid request line
+	if len(parts) < 2 {
+		return ""
+	}
+	
+	// The path is the second part of the request line
+	return parts[1]
 }
