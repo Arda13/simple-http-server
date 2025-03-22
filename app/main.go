@@ -64,7 +64,9 @@ func handleConnection(conn net.Conn) {
 
 	// Determine response based on path
 	if path == "/" {
-		sendResponse(conn, "200 OK", "", "")
+		// Create an empty map for headers
+		emptyHeaders := make(map[string]string)
+		sendResponse(conn, "200 OK", emptyHeaders, "")
 	} else if strings.HasPrefix(path, "/echo/") {
 		// Extract the string after "/echo/"
 		echoStr := path[len("/echo/"):]
@@ -76,7 +78,9 @@ func handleConnection(conn net.Conn) {
 		
 		sendResponse(conn, "200 OK", headers, echoStr)
 	} else {
-		sendResponse(conn, "404 Not Found", "", "")
+		// Create an empty map for headers
+		emptyHeaders := make(map[string]string)
+		sendResponse(conn, "404 Not Found", emptyHeaders, "")
 	}
 }
 
