@@ -2,14 +2,21 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 func main() {
+	// Parse command line flags
+	directoryFlag := flag.String("directory", "", "Directory to serve files from")
+	flag.Parse()
+
 	// Listen on port 4221
 	listener, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
@@ -29,11 +36,11 @@ func main() {
 		}
 
 		// Handle the connection in a new goroutine
-		go handleConnection(conn)
+		go handleConnection(conn, *directoryFlag)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, directory string) {
 	defer conn.Close()
 
 	// Create a buffered reader for the connection
@@ -91,6 +98,54 @@ func handleConnection(conn net.Conn) {
 		respHeaders["Content-Length"] = strconv.Itoa(len(userAgent))
 		
 		sendResponse(conn, "200 OK", respHeaders, userAgent)
+	} else if strings.HasPrefix(path, "/files/") {
+		// Handle file request
+		if directory == "" {
+			// No directory specified
+			emptyHeaders := make(map[string]string)
+			sendResponse(conn, "404 Not Found", emptyHeaders, "")
+			return
+		}
+
+		// Extract the filename from the path
+		filename := path[len("/files/"):]
+		
+		// Build the full file path
+		filePath := filepath.Join(directory, filename)
+		
+		// Try to open the file
+		file, err := os.Open(filePath)
+		if err != nil {
+			// File doesn't exist or can't be opened
+			emptyHeaders := make(map[string]string)
+			sendResponse(conn, "404 Not Found", emptyHeaders, "")
+			return
+		}
+		defer file.Close()
+		
+		// Get file info to determine size
+		fileInfo, err := file.Stat()
+		if err != nil {
+			emptyHeaders := make(map[string]string)
+			sendResponse(conn, "500 Internal Server Error", emptyHeaders, "")
+			return
+		}
+		
+		// Read file contents
+		fileContents := make([]byte, fileInfo.Size())
+		_, err = io.ReadFull(file, fileContents)
+		if err != nil {
+			emptyHeaders := make(map[string]string)
+			sendResponse(conn, "500 Internal Server Error", emptyHeaders, "")
+			return
+		}
+		
+		// Send response with file contents
+		respHeaders := make(map[string]string)
+		respHeaders["Content-Type"] = "application/octet-stream"
+		respHeaders["Content-Length"] = strconv.FormatInt(fileInfo.Size(), 10)
+		
+		sendResponse(conn, "200 OK", respHeaders, string(fileContents))
 	} else {
 		emptyHeaders := make(map[string]string)
 		sendResponse(conn, "404 Not Found", emptyHeaders, "")
