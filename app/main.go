@@ -49,22 +49,26 @@ func handleConnection(conn net.Conn) {
 	// Parse the request line to extract the path
 	path := parsePath(requestLine)
 
-	// Read and discard headers - not needed for this implementation
+	// Read headers
+	headers := make(map[string]string)
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println("Error reading headers:", err.Error())
 			return
 		}
+		
 		// Headers end with an empty line (just \r\n)
 		if line == "\r\n" {
 			break
 		}
+		
+		// Parse header and add to map
+		parseHeader(line, headers)
 	}
 
 	// Determine response based on path
 	if path == "/" {
-		// Create an empty map for headers
 		emptyHeaders := make(map[string]string)
 		sendResponse(conn, "200 OK", emptyHeaders, "")
 	} else if strings.HasPrefix(path, "/echo/") {
@@ -72,13 +76,22 @@ func handleConnection(conn net.Conn) {
 		echoStr := path[len("/echo/"):]
 		
 		// Send response with Content-Type and Content-Length headers
-		headers := make(map[string]string)
-		headers["Content-Type"] = "text/plain"
-		headers["Content-Length"] = strconv.Itoa(len(echoStr))
+		respHeaders := make(map[string]string)
+		respHeaders["Content-Type"] = "text/plain"
+		respHeaders["Content-Length"] = strconv.Itoa(len(echoStr))
 		
-		sendResponse(conn, "200 OK", headers, echoStr)
+		sendResponse(conn, "200 OK", respHeaders, echoStr)
+	} else if path == "/user-agent" {
+		// Get the User-Agent header
+		userAgent := headers["user-agent"]
+		
+		// Send response with Content-Type and Content-Length headers
+		respHeaders := make(map[string]string)
+		respHeaders["Content-Type"] = "text/plain"
+		respHeaders["Content-Length"] = strconv.Itoa(len(userAgent))
+		
+		sendResponse(conn, "200 OK", respHeaders, userAgent)
 	} else {
-		// Create an empty map for headers
 		emptyHeaders := make(map[string]string)
 		sendResponse(conn, "404 Not Found", emptyHeaders, "")
 	}
@@ -96,6 +109,24 @@ func parsePath(requestLine string) string {
 	
 	// The path is the second part of the request line
 	return parts[1]
+}
+
+// Parse a header line and add it to the headers map
+func parseHeader(line string, headers map[string]string) {
+	line = strings.TrimSpace(line)
+	
+	// Find the colon that separates header name from value
+	colonIdx := strings.Index(line, ":")
+	if colonIdx == -1 {
+		return // Not a valid header
+	}
+	
+	// Extract name and value
+	name := strings.ToLower(strings.TrimSpace(line[:colonIdx]))
+	value := strings.TrimSpace(line[colonIdx+1:])
+	
+	// Add to headers map
+	headers[name] = value
 }
 
 // Send an HTTP response with optional headers and body
